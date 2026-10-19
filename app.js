@@ -149,6 +149,8 @@
     timerLeft: 45,
     lastAgain: null,
     speakVoice: null,
+    speechUnlocked: false,
+    ttsSupported: typeof window !== "undefined" && "speechSynthesis" in window,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -193,18 +195,30 @@
     return a;
   }
 
-  /* —— 廣東話朗讀（Web Speech API） —— */
+  /* —— 廣東話朗讀（Web Speech API · iOS-safe） —— */
 
   function pickCantoneseVoice() {
     if (!window.speechSynthesis) return null;
     const voices = speechSynthesis.getVoices() || [];
     if (!voices.length) return null;
     const prefer = (v) => {
-      const lang = (v.lang || "").toLowerCase();
+      const lang = (v.lang || "").toLowerCase().replace(/_/g, "-");
       const name = (v.name || "").toLowerCase();
+      // Prefer Cantonese / Hong Kong first
       if (lang === "zh-hk" || lang.startsWith("zh-hk")) return 100;
-      if (name.includes("hong kong") || name.includes("cantonese") || name.includes("yue")) return 90;
+      if (lang === "yue" || lang.startsWith("yue")) return 95;
+      if (
+        name.includes("hong kong") ||
+        name.includes("cantonese") ||
+        name.includes("yue") ||
+        name.includes("sinji") ||
+        name.includes("sin-ji")
+      ) {
+        return 90;
+      }
+      // Taiwan Mandarin is closer for traditional chars than zh-CN
       if (lang === "zh-tw" || lang.startsWith("zh-tw")) return 50;
+      if (name.includes("meijia") || name.includes("mei-jia")) return 48;
       if (lang === "zh-cn" || lang.startsWith("zh-cn") || lang === "zh") return 30;
       if (lang.startsWith("zh")) return 20;
       return 0;
@@ -223,41 +237,142 @@
 
   function refreshVoice() {
     state.speakVoice = pickCantoneseVoice();
+    updateTtsHint();
+  }
+
+  function ttsAvailable() {
+    return !!(
+      state.ttsSupported &&
+      window.speechSynthesis &&
+      typeof SpeechSynthesisUtterance !== "undefined"
+    );
+  }
+
+  function updateTtsHint(msg) {
+    const el = $("tts-hint");
+    if (!el) return;
+    if (msg) {
+      el.textContent = msg;
+      el.classList.remove("hidden");
+      return;
+    }
+    if (!ttsAvailable()) {
+      el.textContent = "呢部機唔支援廣東話朗讀";
+      el.classList.remove("hidden");
+      return;
+    }
+    // Keep hint hidden during normal use; only show when speaking fails / unsupported
+    if (!el.dataset.sticky) el.classList.add("hidden");
+  }
+
+  function showTtsFeedback(msg, sticky) {
+    const el = $("tts-hint");
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove("hidden");
+    if (sticky) el.dataset.sticky = "1";
+    else delete el.dataset.sticky;
   }
 
   function stopSpeech() {
     try {
-      if (window.speechSynthesis) speechSynthesis.cancel();
+      if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) {
+        speechSynthesis.cancel();
+      }
     } catch (_) { /* ignore */ }
     const btn = $("btn-speak");
     if (btn) btn.classList.remove("speaking");
   }
 
-  function speakText(text, opts) {
-    if (!text || state.muted) return;
-    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") return;
-    stopSpeech();
+  /** Mark speech as user-gesture-unlocked. Do NOT cancel() here — on iOS
+   *  cancel-immediately-before-speak is a common cause of silence. The real
+   *  unlock is the audible speak() that runs synchronously in the same tap. */
+  function unlockSpeech() {
+    if (!ttsAvailable()) return;
+    try {
+      speechSynthesis.getVoices();
+      refreshVoice();
+    } catch (_) { /* ignore */ }
+    state.speechUnlocked = true;
+  }
+
+  function buildUtterance(text) {
     const u = new SpeechSynthesisUtterance(String(text));
     refreshVoice();
     if (state.speakVoice) {
       u.voice = state.speakVoice;
       u.lang = state.speakVoice.lang || "zh-HK";
     } else {
+      // Fallback chain for engines that pick by lang only
       u.lang = "zh-HK";
     }
     u.rate = 0.92;
     u.pitch = 1;
+    u.volume = 1;
     const btn = $("btn-speak");
     u.onstart = () => {
       if (btn) btn.classList.add("speaking");
     };
-    u.onend = u.onerror = () => {
+    u.onend = () => {
       if (btn) btn.classList.remove("speaking");
     };
-    if (opts && opts.force) {
-      /* always speak when user taps */
+    u.onerror = (ev) => {
+      if (btn) btn.classList.remove("speaking");
+      if (ev && ev.error && ev.error !== "canceled" && ev.error !== "interrupted") {
+        showTtsFeedback("朗讀失敗 · 試再撳喇叭，或喺系統設定加廣東話語音", false);
+      }
+    };
+    return u;
+  }
+
+  /**
+   * Speak text. On iOS Safari, cancel() immediately before speak() often yields silence.
+   * Only cancel when already speaking; after cancel, delay the next speak.
+   * User-gesture path (force) must call speak() synchronously when idle.
+   */
+  function speakText(text, opts) {
+    const force = !!(opts && opts.force);
+    if (!text) return;
+    if (state.muted && !force) return;
+    if (state.muted && force) {
+      showTtsFeedback("已靜音 · 請喺主頁關閉「靜音」", false);
+      return;
     }
-    speechSynthesis.speak(u);
+    if (!ttsAvailable()) {
+      showTtsFeedback("呢部機唔支援朗讀（Web Speech）", true);
+      return;
+    }
+
+    unlockSpeech();
+    refreshVoice();
+
+    const run = () => {
+      const u = buildUtterance(text);
+      // If no zh-HK voice, still try zh-TW then generic zh as lang-only fallbacks
+      if (!state.speakVoice) {
+        // Second chance: try lang variants without a Voice object
+        u.lang = "zh-HK";
+      }
+      try {
+        speechSynthesis.speak(u);
+        // Some iOS builds pause immediately; nudge resume
+        if (speechSynthesis.paused) {
+          try { speechSynthesis.resume(); } catch (_) { /* ignore */ }
+        }
+      } catch (_) {
+        showTtsFeedback("朗讀啟動失敗 · 再撳一次喇叭", false);
+      }
+    };
+
+    const busy = speechSynthesis.speaking || speechSynthesis.pending;
+    if (busy) {
+      try { speechSynthesis.cancel(); } catch (_) { /* ignore */ }
+      // iOS: must wait a tick after cancel, or the next utterance is dropped
+      setTimeout(run, 80);
+    } else {
+      // Idle: speak synchronously so iOS keeps the user-gesture unlock
+      run();
+    }
   }
 
   function buildSpeakScript(q) {
@@ -272,11 +387,18 @@
   }
 
   function maybeAutoRead(q) {
+    if (state._skipAutoReadOnce) {
+      state._skipAutoReadOnce = false;
+      return;
+    }
     if (state.muted || !state.autoRead) return;
+    if (!state.speechUnlocked) {
+      showTtsFeedback("自動朗讀：請撳喇叭 🔊 先解鎖（iPhone 需要）", false);
+      return;
+    }
     const script = buildSpeakScript(q);
     if (script) {
-      // slight delay so UI paints first; helps iOS unlock after user gesture startRound
-      setTimeout(() => speakText(script), 280);
+      setTimeout(() => speakText(script), 200);
     }
   }
 
@@ -879,9 +1001,19 @@
     $("q-prompt").innerHTML = tag + escapeHtml(q.prompt);
 
     const speakBtn = $("btn-speak");
-    speakBtn.disabled = !!state.muted;
-    speakBtn.classList.toggle("muted-ui", !!state.muted);
-    speakBtn.setAttribute("aria-label", state.muted ? "已靜音" : "廣東話朗讀題目");
+    const noTts = !ttsAvailable();
+    // Keep clickable when muted so we can show「已靜音」feedback; only block if no TTS
+    speakBtn.disabled = noTts;
+    speakBtn.classList.toggle("muted-ui", !!state.muted || noTts);
+    speakBtn.setAttribute(
+      "aria-label",
+      noTts ? "唔支援朗讀" : state.muted ? "已靜音" : "廣東話朗讀題目"
+    );
+    if (noTts) showTtsFeedback("呢部機唔支援廣東話朗讀", true);
+    else {
+      const hint = $("tts-hint");
+      if (hint && !hint.dataset.sticky) hint.classList.add("hidden");
+    }
 
     renderVisual(q.visual);
 
@@ -1054,13 +1186,23 @@
     const d = diff();
     $("opt-timer-label").textContent = d.timerLabel;
     document.querySelectorAll(".diff-btn").forEach((btn) => {
-      const on = btn.dataset.diff === state.difficulty;
+      const on = btn.getAttribute("data-diff") === state.difficulty;
       btn.classList.toggle("active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
+    const sel = $("diff-selected");
+    if (sel) sel.textContent = "已選：" + d.label;
+    const block = $("diff-block") || document.querySelector(".diff-block");
+    if (block) block.classList.toggle("diff-chosen", !!state.difficulty);
   }
 
   function startRound(mode, formatId) {
+    // Must run inside the tap that starts the round (iOS speech unlock)
+    unlockSpeech();
+    if (!state.difficulty || !DIFFICULTIES[state.difficulty]) {
+      state.difficulty = "medium";
+      syncHomeOpts();
+    }
     state.mode = mode;
     state.formatId = formatId;
     state.useTimer = mode === "mock" && $("opt-timer").checked;
@@ -1072,7 +1214,13 @@
     state.score = 0;
     state.lastAgain = { mode, formatId, difficulty: state.difficulty };
     show("screen-play");
+    const speakNow = state.autoRead && !state.muted && state.speechUnlocked;
+    if (speakNow) state._skipAutoReadOnce = true;
     renderQuestion();
+    if (speakNow) {
+      const first = state.questions[0];
+      if (first) speakText(buildSpeakScript(first));
+    }
   }
 
   function buildFormatList() {
@@ -1092,13 +1240,34 @@
   }
 
   /* —— Wire UI —— */
-  document.querySelectorAll(".diff-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.difficulty = btn.dataset.diff;
-      syncHomeOpts();
-      savePrefs();
-    });
-  });
+  function selectDifficulty(id, btnEl) {
+    if (!id || !DIFFICULTIES[id]) return;
+    state.difficulty = id;
+    syncHomeOpts();
+    savePrefs();
+    if (btnEl) {
+      btnEl.classList.add("diff-pulse");
+      setTimeout(() => btnEl.classList.remove("diff-pulse"), 220);
+    }
+  }
+
+  (function wireDifficulty() {
+    const row = $("diff-row");
+    if (!row) return;
+    // Event delegation: taps on nested <strong>/<small> still hit the button.
+    // Debounce click+pointerup so iPhone does not fire twice.
+    let lastTs = 0;
+    const onPick = (e) => {
+      const btn = e.target.closest(".diff-btn");
+      if (!btn || !row.contains(btn)) return;
+      const now = Date.now();
+      if (now - lastTs < 350) return;
+      lastTs = now;
+      selectDifficulty(btn.getAttribute("data-diff"), btn);
+    };
+    row.addEventListener("click", onPick);
+    row.addEventListener("pointerup", onPick);
+  })();
 
   $("opt-auto-read").addEventListener("change", () => {
     state.autoRead = $("opt-auto-read").checked;
@@ -1119,10 +1288,12 @@
   });
   $("opt-timer").addEventListener("change", savePrefs);
 
-  $("btn-speak").addEventListener("click", () => {
-    if (state.muted) return;
+  $("btn-speak").addEventListener("click", (e) => {
+    e.preventDefault();
+    unlockSpeech();
     const q = state.questions[state.index];
     if (!q) return;
+    // Synchronous speak inside tap handler — required on iOS Safari
     speakText(buildSpeakScript(q), { force: true });
   });
 
@@ -1171,8 +1342,23 @@
   if (window.speechSynthesis) {
     refreshVoice();
     speechSynthesis.addEventListener("voiceschanged", refreshVoice);
+    // iOS often populates voices asynchronously after first getVoices()
+    setTimeout(refreshVoice, 250);
+    setTimeout(refreshVoice, 1000);
+  } else {
+    updateTtsHint();
   }
+
+  // Unlock speech on any early home interaction (iOS)
+  ["pointerdown", "touchstart", "click"].forEach((evt) => {
+    document.getElementById("screen-home")?.addEventListener(
+      evt,
+      () => unlockSpeech(),
+      { passive: true, once: false }
+    );
+  });
 
   loadPrefs();
   syncHomeOpts();
+  updateTtsHint();
 })();

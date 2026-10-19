@@ -33,22 +33,26 @@
         <p class="intro">K3–小一 · 數感 · 規律 · 口頭推理</p>
       </header>
 
-      <div class="diff-block" role="group" aria-label="難度">
-        <p class="diff-label">難度</p>
+      <div class="diff-block diff-chosen" id="diff-block" role="group" aria-label="難度">
+        <p class="diff-label">先揀難度，再開始</p>
         <div class="diff-row" id="diff-row">
           <button type="button" class="diff-btn" data-diff="easy" aria-pressed="false">
+            <span class="diff-check" aria-hidden="true">✓</span>
             <strong>基礎</strong>
             <small>細數字 · 輕鬆</small>
           </button>
           <button type="button" class="diff-btn active" data-diff="medium" aria-pressed="true">
+            <span class="diff-check" aria-hidden="true">✓</span>
             <strong>進階</strong>
             <small>面試常見</small>
           </button>
           <button type="button" class="diff-btn" data-diff="hard" aria-pressed="false">
+            <span class="diff-check" aria-hidden="true">✓</span>
             <strong>神小挑戰</strong>
             <small>大啲 · 趕啲</small>
           </button>
         </div>
+        <p class="diff-selected" id="diff-selected">已選：進階</p>
       </div>
 
       <div class="mode-stack">
@@ -120,6 +124,7 @@
             🔊
           </button>
         </div>
+        <p id="tts-hint" class="tts-hint hidden" role="status" aria-live="polite"></p>
         <div id="q-visual" class="q-visual" aria-hidden="false"></div>
         <div id="q-choices" class="q-choices" role="group" aria-label="答案"></div>
       </div>
