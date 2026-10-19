@@ -1,9 +1,71 @@
-/* 升小數學面試練 — 神小風格偏規律／比較／圖畫應用／數感 */
+/* 升小數學面試練 — 神小風格偏規律／比較／圖畫應用／數感 · 廣東話朗讀 · 三難度 */
 (function () {
   "use strict";
 
   const ROUND_LEN = 8;
-  const TIMER_SEC = 45;
+
+  const DIFFICULTIES = {
+    easy: {
+      id: "easy",
+      label: "基礎",
+      short: "基礎",
+      timerSec: 60,
+      timerLabel: "模擬加計時（每題約 60 秒）",
+      countMin: 2,
+      countMax: 5,
+      recognizeMax: 5,
+      compareMax: 5,
+      addMaxSum: 8,
+      addXMax: 4,
+      addYMax: 3,
+      subTotalMax: 7,
+      orderCount: 3,
+      orderStartMax: 4,
+      patternKinds: ["abab", "countUp"],
+      countUpStep: 1,
+      shapeHard: false,
+    },
+    medium: {
+      id: "medium",
+      label: "進階",
+      short: "進階",
+      timerSec: 45,
+      timerLabel: "模擬加計時（每題約 45 秒）",
+      countMin: 3,
+      countMax: 10,
+      recognizeMax: 9,
+      compareMax: 8,
+      addMaxSum: 12,
+      addXMax: 6,
+      addYMax: 5,
+      subTotalMax: 10,
+      orderCount: 3,
+      orderStartMax: 6,
+      patternKinds: ["abab", "aab", "countUp", "shapeCycle", "size"],
+      countUpStep: 1,
+      shapeHard: false,
+    },
+    hard: {
+      id: "hard",
+      label: "神小挑戰",
+      short: "神小挑戰",
+      timerSec: 30,
+      timerLabel: "模擬加計時（每題約 30 秒）",
+      countMin: 6,
+      countMax: 15,
+      recognizeMax: 12,
+      compareMax: 12,
+      addMaxSum: 18,
+      addXMax: 9,
+      addYMax: 8,
+      subTotalMax: 15,
+      orderCount: 4,
+      orderStartMax: 9,
+      patternKinds: ["abab", "aab", "countUp", "shapeCycle", "size", "abc", "countUp2"],
+      countUpStep: 2,
+      shapeHard: true,
+    },
+  };
 
   const OBJECTS = ["🍎", "⭐", "🐶", "🎈", "🍪", "🐱", "🚗", "🌸", "🐟", "🐥"];
   const SHAPES = [
@@ -75,14 +137,18 @@
   const state = {
     mode: null, // "mock" | "practice"
     formatId: null,
+    difficulty: "medium",
     useTimer: false,
+    autoRead: false,
+    muted: false,
     questions: [],
     index: 0,
     score: 0,
     answered: false,
     timerId: null,
-    timerLeft: TIMER_SEC,
+    timerLeft: 45,
     lastAgain: null,
+    speakVoice: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -117,17 +183,118 @@
     return shuffle([...set]);
   }
 
+  function diff() {
+    return DIFFICULTIES[state.difficulty] || DIFFICULTIES.medium;
+  }
+
+  function rangePool(min, max) {
+    const a = [];
+    for (let i = min; i <= max; i++) a.push(i);
+    return a;
+  }
+
+  /* —— 廣東話朗讀（Web Speech API） —— */
+
+  function pickCantoneseVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    const prefer = (v) => {
+      const lang = (v.lang || "").toLowerCase();
+      const name = (v.name || "").toLowerCase();
+      if (lang === "zh-hk" || lang.startsWith("zh-hk")) return 100;
+      if (name.includes("hong kong") || name.includes("cantonese") || name.includes("yue")) return 90;
+      if (lang === "zh-tw" || lang.startsWith("zh-tw")) return 50;
+      if (lang === "zh-cn" || lang.startsWith("zh-cn") || lang === "zh") return 30;
+      if (lang.startsWith("zh")) return 20;
+      return 0;
+    };
+    let best = null;
+    let score = 0;
+    voices.forEach((v) => {
+      const s = prefer(v);
+      if (s > score) {
+        score = s;
+        best = v;
+      }
+    });
+    return best;
+  }
+
+  function refreshVoice() {
+    state.speakVoice = pickCantoneseVoice();
+  }
+
+  function stopSpeech() {
+    try {
+      if (window.speechSynthesis) speechSynthesis.cancel();
+    } catch (_) { /* ignore */ }
+    const btn = $("btn-speak");
+    if (btn) btn.classList.remove("speaking");
+  }
+
+  function speakText(text, opts) {
+    if (!text || state.muted) return;
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") return;
+    stopSpeech();
+    const u = new SpeechSynthesisUtterance(String(text));
+    refreshVoice();
+    if (state.speakVoice) {
+      u.voice = state.speakVoice;
+      u.lang = state.speakVoice.lang || "zh-HK";
+    } else {
+      u.lang = "zh-HK";
+    }
+    u.rate = 0.92;
+    u.pitch = 1;
+    const btn = $("btn-speak");
+    u.onstart = () => {
+      if (btn) btn.classList.add("speaking");
+    };
+    u.onend = u.onerror = () => {
+      if (btn) btn.classList.remove("speaking");
+    };
+    if (opts && opts.force) {
+      /* always speak when user taps */
+    }
+    speechSynthesis.speak(u);
+  }
+
+  function buildSpeakScript(q) {
+    if (!q) return "";
+    const parts = [];
+    if (q.prompt) parts.push(q.prompt);
+    if (q.visual && q.visual.type === "story" && q.visual.text) {
+      parts.push(q.visual.text);
+    }
+    if (q.speakExtra) parts.push(q.speakExtra);
+    return parts.join("。").replace(/～/g, "。");
+  }
+
+  function maybeAutoRead(q) {
+    if (state.muted || !state.autoRead) return;
+    const script = buildSpeakScript(q);
+    if (script) {
+      // slight delay so UI paints first; helps iOS unlock after user gesture startRound
+      setTimeout(() => speakText(script), 280);
+    }
+  }
+
   /* —— Generators —— */
 
   function genCount() {
-    const n = 3 + rand(8); // 3–10
+    const d = diff();
+    const span = d.countMax - d.countMin + 1;
+    const n = d.countMin + rand(span);
     const obj = pick(OBJECTS);
     const items = Array(n).fill(obj);
-    const choices = uniqueChoices(n, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 4);
+    const pool = rangePool(Math.max(1, d.countMin - 1), d.countMax + 1);
+    const choices = uniqueChoices(n, pool, 4);
     return {
       format: "count",
       tag: "數數",
       prompt: `數一數：一共有幾多個？`,
+      speakExtra: `請數一數圖入面有幾多個。`,
       visual: { type: "objects", items },
       choices: choices.map(String),
       answer: String(n),
@@ -136,55 +303,57 @@
   }
 
   function genRecognize() {
+    const d = diff();
     const kind = rand(2);
     if (kind === 0) {
-      // Match digit to quantity
-      const n = 1 + rand(9);
+      const n = 1 + rand(d.recognizeMax);
       const obj = pick(OBJECTS);
+      const pool = rangePool(1, Math.max(d.recognizeMax, n + 2));
       return {
         format: "recognize",
         tag: "認數字",
         prompt: `邊個數字啱呢堆物件？`,
+        speakExtra: `圖入面有幾多個？揀啱嘅數字。`,
         visual: { type: "objects", items: Array(n).fill(obj) },
-        choices: uniqueChoices(n, [1, 2, 3, 4, 5, 6, 7, 8, 9], 4).map(String),
+        choices: uniqueChoices(n, pool, 4).map(String),
         answer: String(n),
         explain: `有 ${n} 個，所以係「${n}」`,
       };
     }
-    // Show digit, pick matching quantity picture (via choice of counts)
-    const n = 2 + rand(7);
-    const distractors = uniqueChoices(n, [1, 2, 3, 4, 5, 6, 7, 8, 9], 4);
+    const n = Math.min(d.recognizeMax, 2 + rand(Math.max(1, d.recognizeMax - 1)));
+    const pool = rangePool(1, Math.max(d.recognizeMax, n + 2));
+    const distractors = uniqueChoices(n, pool, 4);
     return {
       format: "recognize",
       tag: "配對",
       prompt: `「${n}」代表幾多？揀啱嘅數量`,
+      speakExtra: `數字 ${n} 代表幾多個？`,
       visual: { type: "bigNumber", n },
-      choices: distractors.map((d) => `${d} 個`),
+      choices: distractors.map((x) => `${x} 個`),
       answer: `${n} 個`,
       explain: `數字 ${n} 就係 ${n} 個`,
     };
   }
 
   function genCompare() {
+    const d = diff();
     const obj = pick(OBJECTS);
-    let a = 2 + rand(6);
-    let b = 2 + rand(6);
-    if (a === b && rand(3) !== 0) b = a + 1 + rand(2);
-    if (a > 8) a = 8;
-    if (b > 8) b = 8;
+    let a = 2 + rand(Math.max(1, d.compareMax - 1));
+    let b = 2 + rand(Math.max(1, d.compareMax - 1));
+    if (a === b && rand(3) !== 0) b = Math.min(d.compareMax, a + 1 + rand(2));
+    if (a > d.compareMax) a = d.compareMax;
+    if (b > d.compareMax) b = d.compareMax;
 
     const mode = pick(["more", "less", "same"]);
     let prompt, answer, explain;
     if (mode === "same") {
       b = a;
-      prompt = "邊堆同左邊一樣多？";
-      // choices will be piles shown as buttons — use A/B/一樣
-      answer = "一樣多";
       explain = `兩邊都係 ${a} 個，一樣多`;
       return {
         format: "compare",
         tag: "比多少",
         prompt: "兩堆係咪一樣多？",
+        speakExtra: "睇下 A 同 B，係咪一樣多？",
         visual: { type: "twoPiles", a, b, obj, labels: ["A", "B"] },
         choices: ["一樣多", "A 多啲", "B 多啲"],
         answer: "一樣多",
@@ -215,6 +384,7 @@
       format: "compare",
       tag: "比多少",
       prompt,
+      speakExtra: prompt + " A 定 B？",
       visual: { type: "twoPiles", a, b, obj, labels: ["A", "B"] },
       choices: a === b ? ["一樣多", "A", "B"] : ["A", "B", "一樣多"],
       answer,
@@ -224,48 +394,51 @@
   }
 
   function genAddSub() {
+    const d = diff();
     const obj = pick(OBJECTS);
-    // 神小：偏情境圖畫應用，多數加
     const isAdd = rand(10) < 7;
     if (isAdd) {
-      const x = 1 + rand(6);
-      const y = 1 + rand(5);
+      const x = 1 + rand(d.addXMax);
+      const y = 1 + rand(d.addYMax);
       const sum = x + y;
-      if (sum > 12) return genAddSub();
+      if (sum > d.addMaxSum) return genAddSub();
       const stories = [
         `有 ${x} 個${obj}，又嚟多 ${y} 個，一共幾多？`,
         `籃入面有 ${x} 個，再放入 ${y} 個，而家有幾多？`,
         `小明有 ${x} 個，媽媽再畀 ${y} 個，一共幾多？`,
       ];
+      const story = pick(stories);
+      const pool = [sum - 2, sum - 1, sum, sum + 1, sum + 2, x, y].filter((n) => n > 0);
       return {
         format: "addsub",
         tag: "加減應用",
         prompt: "聽清楚題目，諗一諗～",
         visual: {
           type: "story",
-          text: pick(stories),
+          text: story,
           items: Array(x).fill(obj).concat(["➕"]).concat(Array(y).fill(obj)),
         },
-        choices: uniqueChoices(sum, [sum - 2, sum - 1, sum, sum + 1, sum + 2, x, y].filter((n) => n > 0), 4).map(String),
+        choices: uniqueChoices(sum, pool, 4).map(String),
         answer: String(sum),
         explain: `${x} + ${y} = ${sum}`,
       };
     }
-    const total = 4 + rand(7); // 4–10
+    const total = Math.min(d.subTotalMax, 4 + rand(Math.max(1, d.subTotalMax - 3)));
     const take = 1 + rand(Math.min(4, total - 1));
     const left = total - take;
     const stories = [
       `有 ${total} 個${obj}，畀咗 ${take} 個，仲剩幾多？`,
       `桌上有 ${total} 個，食咗 ${take} 個，剩返幾多？`,
     ];
+    const story = pick(stories);
     return {
       format: "addsub",
       tag: "加減應用",
       prompt: "聽清楚題目，諗一諗～",
       visual: {
         type: "story",
-        text: pick(stories),
-        items: Array(total).fill(obj),
+        text: story,
+        items: Array(Math.min(total, 12)).fill(obj),
       },
       choices: uniqueChoices(left, [left - 1, left, left + 1, take, total].filter((n) => n >= 0), 4).map(String),
       answer: String(left),
@@ -274,7 +447,8 @@
   }
 
   function genPattern() {
-    const kind = pick(["abab", "aab", "countUp", "shapeCycle", "size"]);
+    const d = diff();
+    const kind = pick(d.patternKinds);
     if (kind === "abab") {
       const a = pick(OBJECTS);
       let b = pick(OBJECTS);
@@ -286,6 +460,7 @@
         format: "pattern",
         tag: "找規律",
         prompt: "下一個係咩？點解？",
+        speakExtra: "睇規律，下一個係咩？",
         visual: { type: "pattern", seq, blank: true },
         choices: shuffle([next, ...wrong]),
         answer: next,
@@ -303,6 +478,7 @@
         format: "pattern",
         tag: "找規律",
         prompt: "睇下規律，下一個係？",
+        speakExtra: "兩個一樣跟住另一個，下一個係？",
         visual: { type: "pattern", seq, blank: true },
         choices: shuffle([next, a, pick(["🟣", "🟠"]), b === "🔴" ? "🔵" : "🔴"]),
         answer: next,
@@ -310,37 +486,56 @@
         emojiChoices: true,
       };
     }
-    if (kind === "countUp") {
-      const start = 1 + rand(3);
-      const seq = [start, start + 1, start + 2, start + 3];
-      const next = start + 4;
+    if (kind === "abc") {
+      const cycle = ["🔴", "🔵", "🟡"];
+      const start = rand(3);
+      const seq = [0, 1, 2, 0, 1].map((i) => cycle[(start + i) % 3]);
+      const next = cycle[(start + 5) % 3];
       return {
         format: "pattern",
         tag: "找規律",
-        prompt: "數字一個大過一個，下一個係？",
+        prompt: "三色輪流，下一個係？",
+        speakExtra: "紅藍黃輪流，下一個係咩色？",
+        visual: { type: "pattern", seq, blank: true },
+        choices: shuffle([next, ...cycle.filter((c) => c !== next), "🟢"]).slice(0, 4),
+        answer: next,
+        explain: `規律：${cycle.join("→")} 循環`,
+        emojiChoices: true,
+      };
+    }
+    if (kind === "countUp" || kind === "countUp2") {
+      const step = kind === "countUp2" ? 2 : d.countUpStep || 1;
+      const start = 1 + rand(3);
+      const seq = [start, start + step, start + 2 * step, start + 3 * step];
+      const next = start + 4 * step;
+      return {
+        format: "pattern",
+        tag: "找規律",
+        prompt: step === 1 ? "數字一個大過一個，下一個係？" : "每次大兩格，下一個係？",
+        speakExtra: step === 1 ? "每次多一，下一個係幾多？" : "每次多兩，下一個係幾多？",
         visual: { type: "pattern", seq: seq.map(String), blank: true },
-        choices: uniqueChoices(next, [next - 2, next - 1, next, next + 1, next + 2], 4).map(String),
+        choices: uniqueChoices(next, [next - 2 * step, next - step, next, next + step, next + 2 * step], 4).map(String),
         answer: String(next),
-        explain: `每次多 1：下一個係 ${next}`,
+        explain: `每次多 ${step}：下一個係 ${next}`,
       };
     }
     if (kind === "size") {
-      // 神小常見：數量遞增 pattern with objects
       const obj = pick(OBJECTS);
-      const seq = ["①", "②", "③"];
-      const visualCounts = [1, 2, 3];
+      const visualCounts = d.id === "hard" ? [2, 4, 6] : [1, 2, 3];
+      const answer = String(visualCounts[visualCounts.length - 1] + (d.id === "hard" ? 2 : 1));
       return {
         format: "pattern",
         tag: "找規律",
         prompt: "物件愈嚟愈多，下一格應該幾多個？",
+        speakExtra: "每格多啲物件，下一格幾多個？",
         visual: {
           type: "countPattern",
           obj,
           counts: visualCounts,
         },
-        choices: ["2", "3", "4", "5"],
-        answer: "4",
-        explain: "每格多 1 個：1→2→3→4",
+        choices: uniqueChoices(Number(answer), [Number(answer) - 2, Number(answer) - 1, Number(answer), Number(answer) + 1, Number(answer) + 2].filter((n) => n > 0), 4).map(String),
+        answer,
+        explain: d.id === "hard" ? "每格多 2 個：2→4→6→8" : "每格多 1 個：1→2→3→4",
       };
     }
     // shapeCycle
@@ -352,6 +547,7 @@
       format: "pattern",
       tag: "找規律",
       prompt: "形狀輪流出現，下一個係？",
+      speakExtra: "形狀輪流，下一個係咩？",
       visual: { type: "pattern", seq, blank: true },
       choices: shuffle([next, ...cycle.filter((c) => c !== next), "⭐"]).slice(0, 4),
       answer: next,
@@ -361,13 +557,15 @@
   }
 
   function genShape() {
-    const target = pick(SHAPES.filter((s) => s.id !== "rect"));
+    const d = diff();
+    const target = pick(d.shapeHard ? SHAPES : SHAPES.filter((s) => s.id !== "rect"));
     const mode = rand(2);
     if (mode === 0) {
       return {
         format: "shape",
         tag: "圖形",
         prompt: "呢個係咩形狀？",
+        speakExtra: "呢個係咩形狀？",
         visual: { type: "shape", shape: target },
         choices: shuffle(SHAPES.map((s) => s.name)).slice(0, 4),
         answer: target.name,
@@ -375,14 +573,15 @@
         singleCol: true,
       };
     }
-    // odd one out — 神小常見
     const base = pick(["⭕", "🔺", "🟦"]);
-    const odd = pick(["⭕", "🔺", "🟦", "⭐"].filter((x) => x !== base));
+    const oddPool = d.shapeHard ? ["⭕", "🔺", "🟦", "⭐", "🟩"] : ["⭕", "🔺", "🟦", "⭐"];
+    const odd = pick(oddPool.filter((x) => x !== base));
     const items = shuffle([base, base, base, odd]);
     return {
       format: "shape",
       tag: "搵唔同",
       prompt: "邊個唔同類？",
+      speakExtra: "邊個唔同類？",
       visual: { type: "pattern", seq: items, blank: false },
       choices: items,
       answer: odd,
@@ -392,15 +591,18 @@
   }
 
   function genOrder() {
-    const count = 3 + rand(2); // 3 or 4
-    const start = 1 + rand(6);
+    const d = diff();
+    const count = d.orderCount;
+    const start = 1 + rand(d.orderStartMax);
+    const step = d.id === "hard" && rand(2) === 0 ? 2 : 1;
     const nums = [];
-    for (let i = 0; i < count; i++) nums.push(start + i);
+    for (let i = 0; i < count; i++) nums.push(start + i * step);
     const shuffled = shuffle(nums);
     return {
       format: "order",
       tag: "排次序",
       prompt: "由細到大，撳次序排好",
+      speakExtra: "由細到大，排好數字次序。",
       visual: { type: "order", nums: shuffled, sorted: nums.slice() },
       choices: [],
       answer: nums.join(","),
@@ -437,7 +639,6 @@
       const gen = GENERATORS[id] || genCount;
       qs.push(gen());
     }
-    // 神小模擬：確保至少有 2 題規律、1 題比較
     if (mode === "mock") {
       qs[0] = genPattern();
       qs[1] = genCompare();
@@ -628,7 +829,6 @@
     });
     el.appendChild(bank);
 
-    // tap slot to undo
     slotEls.forEach((s) => {
       s.addEventListener("click", () => {
         if (state.answered || !s.dataset.val) return;
@@ -657,7 +857,6 @@
     });
     el.appendChild(confirm);
 
-    // clear choices area for order
     $("q-choices").innerHTML = "";
     $("q-choices").classList.add("hidden");
   }
@@ -665,9 +864,12 @@
   function renderQuestion() {
     const q = state.questions[state.index];
     state.answered = false;
+    stopSpeech();
     $("play-progress").textContent = `${state.index + 1} / ${state.questions.length}`;
-    $("play-mode-label").textContent =
+    const d = diff();
+    const modeName =
       state.mode === "mock" ? "神小風格模擬" : FORMATS.find((f) => f.id === state.formatId)?.name || "練習";
+    $("play-mode-label").textContent = `${modeName} · ${d.label}`;
 
     $("feedback").classList.add("hidden");
     $("feedback").classList.remove("ok", "bad");
@@ -675,6 +877,11 @@
 
     const tag = q.tag ? `<span class="q-tag">${q.tag}</span><br/>` : "";
     $("q-prompt").innerHTML = tag + escapeHtml(q.prompt);
+
+    const speakBtn = $("btn-speak");
+    speakBtn.disabled = !!state.muted;
+    speakBtn.classList.toggle("muted-ui", !!state.muted);
+    speakBtn.setAttribute("aria-label", state.muted ? "已靜音" : "廣東話朗讀題目");
 
     renderVisual(q.visual);
 
@@ -696,6 +903,8 @@
 
     if (state.useTimer) startTimer();
     else stopTimer();
+
+    maybeAutoRead(q);
   }
 
   function escapeHtml(s) {
@@ -710,13 +919,13 @@
     if (state.answered) return;
     state.answered = true;
     stopTimer();
+    stopSpeech();
 
     const q = state.questions[state.index];
     const timedOut = given === "__timeout__";
     const ok = !timedOut && String(given) === String(q.answer);
     if (ok) state.score++;
 
-    // mark choice buttons
     $("q-choices").querySelectorAll(".choice-btn").forEach((btn) => {
       btn.classList.add("disabled");
       if (btn.textContent === q.answer) btn.classList.add("correct");
@@ -740,6 +949,7 @@
   }
 
   function softBeep(ok) {
+    if (state.muted) return;
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const o = ctx.createOscillator();
@@ -756,14 +966,15 @@
 
   function startTimer() {
     stopTimer();
-    state.timerLeft = TIMER_SEC;
+    const d = diff();
+    state.timerLeft = d.timerSec;
     const wrap = $("timer-wrap");
     wrap.classList.remove("hidden", "warn");
     $("timer-sec").textContent = String(state.timerLeft);
     state.timerId = setInterval(() => {
       state.timerLeft--;
       $("timer-sec").textContent = String(Math.max(0, state.timerLeft));
-      if (state.timerLeft <= 10) wrap.classList.add("warn");
+      if (state.timerLeft <= Math.min(10, Math.floor(d.timerSec / 3))) wrap.classList.add("warn");
       if (state.timerLeft <= 0) {
         stopTimer();
         if (!state.answered) {
@@ -780,17 +991,23 @@
   }
 
   function showResult() {
+    stopSpeech();
     show("screen-result");
     const total = state.questions.length;
     const s = state.score;
+    const d = diff();
     $("result-score").textContent = `${s} / ${total}`;
+    $("result-diff").textContent = `難度：${d.label}`;
     let stars = "⭐";
     let title = "加油呀！";
     let msg = "多啲練規律同比多少，神小面試好睇呢啲。";
     if (s === total) {
       stars = "⭐⭐⭐";
       title = "满分！好叻！";
-      msg = "數感同推理都好穩，繼續保持輕鬆表達「我點諗」。";
+      msg =
+        d.id === "hard"
+          ? "神小挑戰都滿分！數感同推理好穩，繼續輕鬆講「我點諗」。"
+          : "數感同推理都好穩，繼續保持輕鬆表達「我點諗」。";
     } else if (s >= Math.ceil(total * 0.75)) {
       stars = "⭐⭐";
       title = "好叻！";
@@ -805,14 +1022,55 @@
     $("result-msg").textContent = msg;
   }
 
+  function loadPrefs() {
+    try {
+      const raw = localStorage.getItem("imp-prefs");
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      if (p.difficulty && DIFFICULTIES[p.difficulty]) state.difficulty = p.difficulty;
+      if (typeof p.autoRead === "boolean") state.autoRead = p.autoRead;
+      if (typeof p.muted === "boolean") state.muted = p.muted;
+      if (typeof p.timer === "boolean") $("opt-timer").checked = p.timer;
+    } catch (_) { /* ignore */ }
+  }
+
+  function savePrefs() {
+    try {
+      localStorage.setItem(
+        "imp-prefs",
+        JSON.stringify({
+          difficulty: state.difficulty,
+          autoRead: state.autoRead,
+          muted: state.muted,
+          timer: $("opt-timer").checked,
+        })
+      );
+    } catch (_) { /* ignore */ }
+  }
+
+  function syncHomeOpts() {
+    $("opt-auto-read").checked = state.autoRead;
+    $("opt-mute").checked = state.muted;
+    const d = diff();
+    $("opt-timer-label").textContent = d.timerLabel;
+    document.querySelectorAll(".diff-btn").forEach((btn) => {
+      const on = btn.dataset.diff === state.difficulty;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
   function startRound(mode, formatId) {
     state.mode = mode;
     state.formatId = formatId;
     state.useTimer = mode === "mock" && $("opt-timer").checked;
+    state.autoRead = $("opt-auto-read").checked;
+    state.muted = $("opt-mute").checked;
+    savePrefs();
     state.questions = buildRound(mode, formatId);
     state.index = 0;
     state.score = 0;
-    state.lastAgain = { mode, formatId };
+    state.lastAgain = { mode, formatId, difficulty: state.difficulty };
     show("screen-play");
     renderQuestion();
   }
@@ -834,6 +1092,40 @@
   }
 
   /* —— Wire UI —— */
+  document.querySelectorAll(".diff-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.difficulty = btn.dataset.diff;
+      syncHomeOpts();
+      savePrefs();
+    });
+  });
+
+  $("opt-auto-read").addEventListener("change", () => {
+    state.autoRead = $("opt-auto-read").checked;
+    if (state.autoRead && state.muted) {
+      state.muted = false;
+      $("opt-mute").checked = false;
+    }
+    savePrefs();
+  });
+  $("opt-mute").addEventListener("change", () => {
+    state.muted = $("opt-mute").checked;
+    if (state.muted) {
+      stopSpeech();
+      state.autoRead = false;
+      $("opt-auto-read").checked = false;
+    }
+    savePrefs();
+  });
+  $("opt-timer").addEventListener("change", savePrefs);
+
+  $("btn-speak").addEventListener("click", () => {
+    if (state.muted) return;
+    const q = state.questions[state.index];
+    if (!q) return;
+    speakText(buildSpeakScript(q), { force: true });
+  });
+
   $("btn-mock").addEventListener("click", () => startRound("mock", null));
   $("btn-practice-menu").addEventListener("click", () => {
     buildFormatList();
@@ -844,9 +1136,11 @@
   });
   $("btn-play-quit").addEventListener("click", () => {
     stopTimer();
+    stopSpeech();
     show("screen-home");
   });
   $("btn-next").addEventListener("click", () => {
+    stopSpeech();
     if (state.index + 1 >= state.questions.length) {
       showResult();
       return;
@@ -855,12 +1149,17 @@
     renderQuestion();
   });
   $("btn-again").addEventListener("click", () => {
-    if (state.lastAgain) startRound(state.lastAgain.mode, state.lastAgain.formatId);
-    else show("screen-home");
+    if (state.lastAgain) {
+      if (state.lastAgain.difficulty) state.difficulty = state.lastAgain.difficulty;
+      syncHomeOpts();
+      startRound(state.lastAgain.mode, state.lastAgain.formatId);
+    } else show("screen-home");
   });
-  $("btn-home").addEventListener("click", () => show("screen-home"));
+  $("btn-home").addEventListener("click", () => {
+    stopSpeech();
+    show("screen-home");
+  });
 
-  // Prevent accidental zoom double-tap on buttons
   document.addEventListener(
     "dblclick",
     (e) => {
@@ -868,4 +1167,12 @@
     },
     { passive: false }
   );
+
+  if (window.speechSynthesis) {
+    refreshVoice();
+    speechSynthesis.addEventListener("voiceschanged", refreshVoice);
+  }
+
+  loadPrefs();
+  syncHomeOpts();
 })();

@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="升小數學面試" />
   <meta name="theme-color" content="#1a0a4e" />
-  <meta name="description" content="升小面試數學練習 — 神小風格模擬 · 數數、規律、比多少、加減、圖形" />
+  <meta name="description" content="升小面試數學練習 — 神小風格模擬 · 數數、規律、比多少、加減、圖形 · 廣東話朗讀" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
@@ -33,6 +33,24 @@
         <p class="intro">K3–小一 · 數感 · 規律 · 口頭推理</p>
       </header>
 
+      <div class="diff-block" role="group" aria-label="難度">
+        <p class="diff-label">難度</p>
+        <div class="diff-row" id="diff-row">
+          <button type="button" class="diff-btn" data-diff="easy" aria-pressed="false">
+            <strong>基礎</strong>
+            <small>細數字 · 輕鬆</small>
+          </button>
+          <button type="button" class="diff-btn active" data-diff="medium" aria-pressed="true">
+            <strong>進階</strong>
+            <small>面試常見</small>
+          </button>
+          <button type="button" class="diff-btn" data-diff="hard" aria-pressed="false">
+            <strong>神小挑戰</strong>
+            <small>大啲 · 趕啲</small>
+          </button>
+        </div>
+      </div>
+
       <div class="mode-stack">
         <button type="button" class="mode-card mock" id="btn-mock">
           <span class="mode-emoji">🏫</span>
@@ -55,12 +73,20 @@
       <div class="home-opts">
         <label class="toggle">
           <input type="checkbox" id="opt-timer" />
-          <span>模擬加計時（每題約 45 秒）</span>
+          <span id="opt-timer-label">模擬加計時（每題約 45 秒）</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="opt-auto-read" />
+          <span>自動廣東話朗讀題目</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="opt-mute" />
+          <span>靜音（關閉朗讀同音效）</span>
         </label>
       </div>
 
       <a class="hub-link" href="https://tlc-cmyk.github.io/primary-prep-hub/">🏠 返主頁</a>
-      <p class="home-foot">專為 iPhone 設計 · 可加入主畫面</p>
+      <p class="home-foot">專為 iPhone 設計 · 可加入主畫面 · 支援 zh-HK 朗讀</p>
     </section>
 
     <!-- FORMAT PICKER -->
@@ -88,7 +114,12 @@
       </header>
 
       <div id="q-card" class="q-card">
-        <p id="q-prompt" class="q-prompt"></p>
+        <div class="q-prompt-row">
+          <p id="q-prompt" class="q-prompt"></p>
+          <button type="button" class="speak-btn" id="btn-speak" aria-label="廣東話朗讀題目" title="廣東話朗讀">
+            🔊
+          </button>
+        </div>
         <div id="q-visual" class="q-visual" aria-hidden="false"></div>
         <div id="q-choices" class="q-choices" role="group" aria-label="答案"></div>
       </div>
@@ -104,6 +135,7 @@
       <div class="result-card">
         <div class="result-stars" id="result-stars" aria-hidden="true">⭐⭐⭐</div>
         <h2 class="result-title" id="result-title">做得好！</h2>
+        <p class="result-diff" id="result-diff"></p>
         <p class="result-score" id="result-score">8 / 8</p>
         <p class="result-msg" id="result-msg">繼續加油！</p>
         <div class="result-actions">

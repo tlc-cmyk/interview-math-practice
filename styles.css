@@ -462,3 +462,98 @@ body {
 @media (min-width: 520px) {
   #app { max-width: 480px; }
 }
+
+/* —— Difficulty —— */
+.diff-block { margin: 4px 0 14px; }
+.diff-label {
+  font-size: 0.8rem; font-weight: 700; opacity: 0.8;
+  margin-bottom: 8px; text-align: center; letter-spacing: 0.06em;
+}
+.diff-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+}
+.diff-btn {
+  border: 2px solid rgba(255,255,255,0.22);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  padding: 10px 6px;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 58px;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+.diff-btn:active { transform: scale(0.97); }
+.diff-btn strong {
+  display: block; font-size: 0.92rem; font-weight: 800; line-height: 1.2;
+}
+.diff-btn small {
+  display: block; margin-top: 3px; font-size: 0.68rem; opacity: 0.75; line-height: 1.25;
+}
+.diff-btn.active {
+  background: rgba(251, 191, 36, 0.28);
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35);
+}
+.diff-btn[data-diff="easy"].active {
+  background: rgba(74, 222, 128, 0.25);
+  border-color: #4ade80;
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.3);
+}
+.diff-btn[data-diff="hard"].active {
+  background: rgba(248, 113, 113, 0.28);
+  border-color: #f87171;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35);
+}
+
+.home-opts { display: flex; flex-direction: column; gap: 10px; }
+.home-opts .toggle { margin: 0; }
+
+/* —— Speak button —— */
+.q-prompt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.q-prompt-row .q-prompt {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+}
+.speak-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: #ede9fe;
+  color: #5b3cc4;
+  font-size: 1.25rem;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 2px 0 #ddd6fe;
+  margin-top: 2px;
+}
+.speak-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #ddd6fe; }
+.speak-btn.speaking {
+  background: #fef3c7;
+  color: #b45309;
+  animation: pulseSpeak 1s ease-in-out infinite;
+}
+.speak-btn.muted-ui,
+.speak-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+@keyframes pulseSpeak {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.result-diff {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #7c5cff;
+}
