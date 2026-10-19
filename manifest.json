@@ -1,0 +1,19 @@
+{
+  "name": "升小數學面試練",
+  "short_name": "升小數學",
+  "description": "神小風格升小面試數學練習：數數、規律、比多少、加減、圖形",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a0a4e",
+  "theme_color": "#2d1b6e",
+  "lang": "zh-HK",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
